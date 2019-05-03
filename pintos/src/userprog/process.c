@@ -86,8 +86,19 @@ start_process (void *file_name_)
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int
-process_wait (tid_t child_tid UNUSED) 
+process_wait (tid_t child_tid) 
 {
+  struct thread *cur = thread_current ();
+  enum intr_level old_level;
+  
+  ASSERT (!intr_context ());
+  // 线程机制保证的一个原子性操作。
+  old_level = intr_disable ();
+  cur->sleep_ticks = 0;
+  cur->wait_tid = child_tid;
+  thread_block();
+
+  intr_set_level (old_level);
   return -1;
 }
 
@@ -114,6 +125,7 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
+  thread_weakup_waiting();
 }
 
 /* Sets up the CPU for running user code in the current
@@ -440,7 +452,7 @@ setup_stack (void **esp)
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
       if (success)
-        *esp = PHYS_BASE;
+        *esp = PHYS_BASE - 12;
       else
         palloc_free_page (kpage);
     }

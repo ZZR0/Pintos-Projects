@@ -5,11 +5,16 @@
 
 #include "tests/lib.h"
 
+void test()
+{
+
+}
+
 int
 main (int argc, char *argv[]) 
 {
   int i;
-
+  test();
   test_name = "args";
 
   msg ("begin");

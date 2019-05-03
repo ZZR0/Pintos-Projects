@@ -118,7 +118,7 @@ thread_start (void)
   struct semaphore idle_started;
   sema_init (&idle_started, 0);
   thread_create ("idle", PRI_MIN, idle, &idle_started);
-
+  threading_started = true;
   /* Start preemptive thread scheduling. */
   intr_enable ();
 
@@ -192,6 +192,7 @@ thread_create (const char *name, int priority,
   
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
+  t->wait_tid = 0;
 
   /* Stack frame for kernel_thread(). */
   kf = alloc_frame (t, sizeof *kf);
@@ -810,5 +811,28 @@ thread_update_load_avg()
     ready_threads++;
   // printf("load_avg:%d\n", thread_get_load_avg());
   load_avg = FP_ADD(FP_MULT(FP_DIV_MIX(FP_CONST(59), 60), load_avg), FP_MULT_MIX(FP_DIV_MIX(FP_CONST(1), 60), ready_threads));
+  intr_set_level (old_level);
+}
+
+void
+thread_weakup_waiting (void)
+{
+  struct list_elem *e;
+  enum intr_level old_level;
+
+  old_level = intr_disable ();
+  ASSERT (intr_get_level () == INTR_OFF);
+
+  struct thread *cur = thread_current ();
+
+  for (e = list_begin (&all_list); e != list_end (&all_list);
+       e = list_next (e))
+  {
+    struct thread *t = list_entry (e, struct thread, allelem);
+    if(t->status == THREAD_BLOCKED && t->wait_tid == cur->tid)
+    {
+      thread_unblock(t);
+    }
+  }
   intr_set_level (old_level);
 }

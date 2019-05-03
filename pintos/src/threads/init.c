@@ -77,7 +77,7 @@ int
 main (void)
 {
   char **argv;
-
+  threading_started = false;
   /* Clear BSS. */  
   bss_init ();
 

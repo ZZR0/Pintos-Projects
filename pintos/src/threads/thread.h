@@ -104,6 +104,8 @@ struct thread
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
+    tid_t wait_tid;
+
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
@@ -116,6 +118,7 @@ struct thread
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
+bool threading_started;
 extern bool thread_mlfqs;
 
 void thread_init (void);
@@ -160,4 +163,6 @@ void thread_increase_recent_cpu(void);
 void thread_update_priority_by_mlfqs(struct thread *t);
 void thread_update_recent_cpu();
 void thread_update_load_avg();
+
+void thread_weakup_waiting (void);
 #endif /* threads/thread.h */
