@@ -302,10 +302,10 @@ void IMkDir(struct intr_frame *f)
     n--;
   }
   if(n<=0)
-   {
-    f->eax=0;
-    return;
-   }
+  {
+  f->eax=0;
+  return;
+  }
   f->eax=DirCreate(DirName);
 }
 
@@ -460,7 +460,7 @@ char * MakePath(const char *from)
     return to;
     // pos=0;
   }
-
+  pos=0;
   char pre=0;
   int i;
   for(i=0;i<lf;i++)
