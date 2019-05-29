@@ -238,9 +238,14 @@ void sys_write(struct intr_frame * f) {
     struct file_node * openf = find_file(&thread_current()->files, *(p + 1));
     // check whether the write file is valid
     if (openf){
-      acquire_file_lock();
-      f->eax = file_write(openf->file, buffer2, size2);
-      release_file_lock();
+      if (openf->file->inode->data.isdir)
+      {
+        f->eax = -1;
+      }else{
+        acquire_file_lock();
+        f->eax = file_write(openf->file, buffer2, size2);
+        release_file_lock();
+      }
     } else
       f->eax = 0;
   }
@@ -345,13 +350,13 @@ void IChDir(struct intr_frame *f)
 void IReadDir(struct intr_frame *f)
 {
   int *p = f->esp;
-  check_func_args((void *)(p + 1), 5);
-  if((char *)*((unsigned int *)f->esp+5)==NULL)
+  check_func_args((void *)(p + 1), 2);
+  if((char *)*((unsigned int *)f->esp+2)==NULL)
   {
       f->eax=-1;
   }
-  int fd=*((unsigned int *)f->esp+4);
-  char *name=*((unsigned int *)f->esp+5);
+  int fd=*((unsigned int *)f->esp+1);
+  char *name=*((unsigned int *)f->esp+2);
   struct file_node *fp=GetFile(thread_current(),fd);
   if(fp->file->inode->removed)
   {
@@ -449,7 +454,7 @@ char * MakePath(const char *from)
     to[lp]='/';
     to[lp+1]=0;
   }
-  if(from[0]=='/')
+  if(from[0]=='/' && lp > 1)
   {
     xstrcpy(to,from+1);
     return to;

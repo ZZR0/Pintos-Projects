@@ -175,10 +175,9 @@ inode_open (block_sector_t sector)
   list_push_front (&open_inodes, &inode->elem);
   inode->sector = sector;
   inode->open_cnt = 1;
-  
+  inode->deny_write_cnt = 0;
   inode->removed = false;
   block_read (fs_device, inode->sector, &inode->data);
-  inode->deny_write_cnt = inode->data.isdir;
   return inode;
 }
 
@@ -533,9 +532,9 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
   const uint8_t *buffer = buffer_;
   off_t bytes_written = 0;
   uint8_t *bounce = NULL;
-
+  
   if (inode->deny_write_cnt)
-    return -1;
+    return 0;
   struct PosInfo pi;
   uint32_t *arr=NULL;
   //while(arr==NULL)
