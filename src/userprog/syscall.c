@@ -454,7 +454,10 @@ char * MakePath(const char *from)
   }
   if(from[0]=='/' && lf > 1)
   {
-    xstrcpy(to,from+1);
+    int p = 0;
+    while(from[p]=='/')
+      p++;
+    xstrcpy(to,from+p);
     return to;
     // pos=0;
   }
