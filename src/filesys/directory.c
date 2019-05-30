@@ -7,13 +7,12 @@
 #include "filesys/filesys.h"
 
 
-
 /* Creates a directory with space for ENTRY_CNT entries in the
    given SECTOR.  Returns true if successful, false on failure. */
 bool
 dir_create (block_sector_t sector, size_t entry_cnt)
 {
-  return inode_create_ex (sector, entry_cnt * sizeof (struct dir_entry), 1);
+  return inode_create (sector, entry_cnt * sizeof (struct dir_entry));
 }
 
 /* Opens and returns the directory for the given INODE, of which
@@ -185,7 +184,7 @@ dir_remove (struct dir *dir, const char *name)
 
   /* Open inode. */
   inode = inode_open (e.inode_sector);
-  if (inode == NULL)
+  if (inode == NULL || inode->data.isdir && inode->open_cnt > 1)
     goto done;
 
   /* Erase directory entry. */
@@ -220,4 +219,34 @@ dir_readdir (struct dir *dir, char name[NAME_MAX + 1])
         } 
     }
   return false;
+}
+
+struct dir *OpenDir(char *path,int *pos)
+{
+  lock_acquire(&DirOpenLock);
+  struct dir *dir=dir_open_root();
+  struct inode *inode=NULL;
+  int cur=0,i,n;
+  n=strlen(path);
+  for(i=0;i<n;i++)
+    if(path[i]=='/')
+    {
+      path[i]=0;
+      dir_lookup(dir,path+cur,&inode);
+      dir_close(dir);
+      if(inode==NULL)
+        goto end;
+      if(inode->data.isdir!=1)
+        goto end;
+      dir=dir_open(inode);
+      inode=NULL;
+      cur=i+1;
+    }
+  *pos=cur;
+  lock_release(&DirOpenLock);
+  return dir;
+
+end:
+  lock_release(&DirOpenLock);
+  return NULL;
 }

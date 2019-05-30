@@ -19,14 +19,13 @@
 
 // syscall array
 syscall_function syscalls[SYSCALL_NUMBER];
-struct lock DirOpenLock;
+
 
 static void syscall_handler (struct intr_frame *);
 struct file_node * GetFile(struct thread *t, int fd);
 bool DirCreate(const char *name);
 char * MakePath(const char *from);
 void xstrcpy(char *to,const char *from);
-struct dir *OpenDir(char *path,int *pos);
 char *GetPwd();
 
 void exit(int exit_status){
@@ -158,7 +157,7 @@ void sys_remove(struct intr_frame * f) {
   check((void*)*(p + 1));
 
   acquire_file_lock();
-  f->eax = filesys_remove((const char *)*(p + 1));
+  f->eax = filesys_remove(MakePath((const char *)*(p + 1)));
   release_file_lock();
 }
 
@@ -333,7 +332,6 @@ void IChDir(struct intr_frame *f)
     free(path);
     return;
   }
-  dir_close(dir);
   while(tpath[n]!='/')
     tpath[n--]=0;
   struct thread *curthr=thread_current();
@@ -454,13 +452,13 @@ char * MakePath(const char *from)
     to[lp]='/';
     to[lp+1]=0;
   }
-  if(from[0]=='/' && lp > 1)
+  if(from[0]=='/' && lf > 1)
   {
     xstrcpy(to,from+1);
     return to;
     // pos=0;
   }
-  pos=0;
+
   char pre=0;
   int i;
   for(i=0;i<lf;i++)
@@ -485,38 +483,10 @@ char * MakePath(const char *from)
     pre=from[i];
   } 
   to[++pos]=0;
+  if (strlen(to) > 1 && to[strlen(to)-1] == '/')
+    to[strlen(to)-1] = 0;
   return to;
   
-}
-
-struct dir *OpenDir(char *path,int *pos)
-{
-  lock_acquire(&DirOpenLock);
-  struct dir *dir=dir_open_root();
-  struct inode *inode=NULL;
-  int cur=0,i,n;
-  n=strlen(path);
-  for(i=0;i<n;i++)
-    if(path[i]=='/')
-    {
-      path[i]=0;
-      dir_lookup(dir,path+cur,&inode);
-      dir_close(dir);
-      if(inode==NULL)
-        goto end;
-      if(inode->data.isdir!=1)
-        goto end;
-      dir=dir_open(inode);
-      inode=NULL;
-      cur=i+1;
-    }
-  *pos=cur;
-  lock_release(&DirOpenLock);
-  return dir;
-
-end:
-  lock_release(&DirOpenLock);
-  return NULL;
 }
 
 char *GetPwd()

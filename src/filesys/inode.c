@@ -132,6 +132,7 @@ bool inode_create_ex (block_sector_t sector, off_t length,uint32_t isdir)
    struct inode ie;
    ie.deny_write_cnt=0;
    ie.data=*disk_inode;
+   ie.open_cnt=0;
     for (i = 0; i < sectors; i++)
     {
       size_t  minb=length<512?length:512;
@@ -532,7 +533,7 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
   const uint8_t *buffer = buffer_;
   off_t bytes_written = 0;
   uint8_t *bounce = NULL;
-  
+
   if (inode->deny_write_cnt)
     return 0;
   struct PosInfo pi;
