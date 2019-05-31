@@ -5,6 +5,7 @@
 #include <list.h>
 #include <stdint.h>
 #include <threads/synch.h>
+#include "filesys/directory.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -121,7 +122,7 @@ struct thread
     struct file * executable; // the thread executable file 
     int max_fd; // the file descriptor used by the thread
 
-
+    struct dir *cur_dir;
     char *pwd;
   };
 

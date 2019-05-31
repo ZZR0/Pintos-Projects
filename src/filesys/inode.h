@@ -48,6 +48,6 @@ void inode_deny_write (struct inode *);
 void inode_allow_write (struct inode *);
 off_t inode_length (const struct inode *);
 
-bool inode_create_ex (block_sector_t sector, off_t length,uint32_t isdir);
+bool inode_create_extend (block_sector_t sector, off_t length,uint32_t isdir);
 
 #endif /* filesys/inode.h */

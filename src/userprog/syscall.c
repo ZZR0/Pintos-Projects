@@ -22,11 +22,9 @@ syscall_function syscalls[SYSCALL_NUMBER];
 
 
 static void syscall_handler (struct intr_frame *);
-struct file_node * GetFile(struct thread *t, int fd);
-bool DirCreate(const char *name);
-char * MakePath(const char *from);
-void xstrcpy(char *to,const char *from);
-char *GetPwd();
+char * get_path(const char *from);
+void copy_to(char *to,const char *from);
+char *get_pwd();
 
 void exit(int exit_status){
   thread_current()->exit_status = exit_status;
@@ -53,11 +51,11 @@ syscall_init (void)
   syscalls[SYS_SEEK] = sys_seek;
   syscalls[SYS_TELL] = sys_tell;
   syscalls[SYS_CLOSE] = sys_close;
-  syscalls[SYS_CHDIR] = IChDir;
-  syscalls[SYS_MKDIR] = IMkDir;
-  syscalls[SYS_READDIR] = IReadDir;
-  syscalls[SYS_ISDIR] = IIsDir;
-  syscalls[SYS_INUMBER] = IInumber;
+  syscalls[SYS_CHDIR] = sys_chdir;
+  syscalls[SYS_MKDIR] = sys_mkdir;
+  syscalls[SYS_READDIR] = sys_readdir;
+  syscalls[SYS_ISDIR] = sys_isdir;
+  syscalls[SYS_INUMBER] = sys_inumber;
 
   lock_init(&DirOpenLock);
 }
@@ -144,10 +142,17 @@ void sys_create(struct intr_frame * f) {
   check_func_args((void *)(p + 1), 2);
   check((void *)*(p + 1));
 
+  char *path = get_path((const char *)*(p + 1));
+  if (path == 0 || strlen (path) > MAX_PATH)
+  {
+    f->eax = false;
+    return;
+  }
   acquire_file_lock();
   // thread_exit ();
-  f->eax = filesys_create(MakePath((const char *)*(p + 1)),*(p + 2));
+  f->eax = filesys_create(path,*(p + 2));
   release_file_lock();
+  free(path);
 }
 
 void sys_remove(struct intr_frame * f) {
@@ -155,10 +160,11 @@ void sys_remove(struct intr_frame * f) {
   
   check_func_args((void *)(p + 1), 1);
   check((void*)*(p + 1));
-
+  char *path = get_path((const char *)*(p + 1));
   acquire_file_lock();
-  f->eax = filesys_remove(MakePath((const char *)*(p + 1)));
+  f->eax = filesys_remove(path);
   release_file_lock();
+  free(path);
 }
 
 void sys_open(struct intr_frame * f) {
@@ -167,9 +173,11 @@ void sys_open(struct intr_frame * f) {
   check((void*)*(p + 1));
 
   struct thread * t = thread_current();
+  char *path = get_path((const char *)*(p + 1));
   acquire_file_lock();
-  struct file * open_f = filesys_open(MakePath((const char *)*(p + 1)));
+  struct file * open_f = filesys_open(path);
   release_file_lock();
+  free(path);
   // check whether the open file is valid
   if(open_f){
     struct file_node *fn = malloc(sizeof(struct file_node));
@@ -289,7 +297,7 @@ void sys_close(struct intr_frame * f) {
 }
 
 
-void IMkDir(struct intr_frame *f)
+void sys_mkdir(struct intr_frame *f)
 {
   int *p = f->esp;
   check_func_args((void *)(p + 1), 1);
@@ -302,18 +310,39 @@ void IMkDir(struct intr_frame *f)
   }
   if(n<=0)
   {
-  f->eax=0;
-  return;
+    f->eax=0;
+    return;
   }
-  f->eax=DirCreate(DirName);
+
+  block_sector_t inode_sector = 0;
+//  struct dir *dir = dir_open_root ();
+
+ char *path=get_path(DirName);
+ // printf("%s %s\n", name, path);
+ if (path == 0 || strlen (path) > MAX_PATH)
+ {
+    f->eax = false;
+    return;
+ }
+ int cur;
+ struct dir *dir=path_open(path,&cur);
+  bool success = (dir != NULL
+                  && free_map_allocate (1, &inode_sector)
+                  && inode_create_extend (inode_sector, 20*sizeof(struct dir_entry),1)
+                  && dir_add(dir,path+cur, inode_sector));
+  if (!success && inode_sector != 0) 
+    free_map_release (inode_sector, 1);
+  dir_close (dir);
+  free(path);
+  f->eax = success;
 }
 
-void IChDir(struct intr_frame *f)
+void sys_chdir(struct intr_frame *f)
 {
   int *p = f->esp;
   check_func_args((void *)(p + 1), 1);
   char *DirName=*((int *)f->esp+1);
-  char *path=MakePath(DirName);
+  char *path=get_path(DirName);
   int n=strlen(path);
   if(path[n-1]!='/')
   {
@@ -323,9 +352,9 @@ void IChDir(struct intr_frame *f)
   }
   char *tpath=malloc(n+1);
   ASSERT(tpath!=NULL);
-  xstrcpy(tpath,path);
+  copy_to(tpath,path);
   int cur=0;
-  struct dir *dir=OpenDir(path,&cur);
+  struct dir *dir=path_open(path,&cur);
   if(dir==NULL)
   {
     f->eax=0;
@@ -338,14 +367,17 @@ void IChDir(struct intr_frame *f)
   if(curthr->pwd!=NULL)
   free(curthr->pwd);
   n=strlen(tpath);
+  // if (curthr->cur_dir)
+  //   dir_close(curthr->cur_dir);
+  curthr->cur_dir = dir;
   curthr->pwd=malloc(n+1);
-  xstrcpy(thread_current()->pwd,tpath);
+  copy_to(thread_current()->pwd,tpath);
   f->eax=1;
   free(path);
   free(tpath);
 }
 
-void IReadDir(struct intr_frame *f)
+void sys_readdir(struct intr_frame *f)
 {
   int *p = f->esp;
   check_func_args((void *)(p + 1), 2);
@@ -355,7 +387,7 @@ void IReadDir(struct intr_frame *f)
   }
   int fd=*((unsigned int *)f->esp+1);
   char *name=*((unsigned int *)f->esp+2);
-  struct file_node *fp=GetFile(thread_current(),fd);
+  struct file_node *fp=find_file(&thread_current()->files,fd);
   if(fp->file->inode->removed)
   {
     f->eax=0;
@@ -371,65 +403,33 @@ void IReadDir(struct intr_frame *f)
   fp->file->pos=dirx.pos;
 }
 
-void IInumber(struct intr_frame *f)
+void sys_inumber(struct intr_frame *f)
 {
   int *p = f->esp;
   check_func_args((void *)(p + 1), 1);
   int fd=*((int *)f->esp+1);
-  struct file_node *fn=GetFile(thread_current(),fd);
+  struct file_node *fn=find_file(&thread_current()->files,fd);
   f->eax= fn->file->inode->sector;
 }
 
-void IIsDir(struct intr_frame *f)
+void sys_isdir(struct intr_frame *f)
 {
   int *p = f->esp;
   check_func_args((void *)(p + 1), 1);
   int fd=*((int *)f->esp+1);
-  struct file_node *fn=GetFile(thread_current(),fd);
+  struct file_node *fn=find_file(&thread_current()->files,fd);
   f->eax= fn->file->inode->data.isdir;
 }
 
-struct file_node *GetFile(struct thread *t, int fd)
-{
-  struct list_elem *e;
-  for (e = list_begin (&t->files); e != list_end (&t->files); e = list_next (e))
-  {
-    struct file_node *fn = list_entry (e, struct file_node, file_elem);
-    if(fn->fd==fd){
-        return fn;
-    }
-  }
-  return NULL;
-}
-
-bool DirCreate(const char *name) 
-{
-  block_sector_t inode_sector = 0;
-//  struct dir *dir = dir_open_root ();
- char *path=MakePath(name);
- ASSERT(path!=0);
- int cur;
- struct dir *dir=OpenDir(path,&cur);
-  bool success = (dir != NULL
-                  && free_map_allocate (1, &inode_sector)
-                  && inode_create_ex (inode_sector, 20*sizeof(struct dir_entry),1)
-                  && dir_add(dir,path+cur, inode_sector));
-  if (!success && inode_sector != 0) 
-    free_map_release (inode_sector, 1);
-  dir_close (dir);
- free(path);
-  return success;
-}
-
-void xstrcpy(char *to,const char *from)
+void copy_to(char *to,const char *from)
 {
   while(*to++=*from++);
 }
 
-char * MakePath(const char *from)
+char *get_path(const char *from)
 {
   //ASSERT(to!=NULL);
-  const char *pwd=GetPwd();
+  const char *pwd=get_pwd();
   char *to;
   int lf=strlen(from);
   int len=lf;
@@ -438,13 +438,12 @@ char * MakePath(const char *from)
   to=(char *)malloc(len+5);//！注意这里，没有释放内存
   if(to==NULL)
   {
-    printf("error\n");
     return 0;
   }
   if(pwd==NULL)
-    xstrcpy(to,"");
+    copy_to(to,"");
   else
-    xstrcpy(to,pwd);  
+    copy_to(to,pwd);  
   int lp=strlen(to);
   int pos=lp-1;
   if(lp > 0 && to[lp-1]!='/')
@@ -457,7 +456,7 @@ char * MakePath(const char *from)
     int p = 0;
     while(from[p]=='/')
       p++;
-    xstrcpy(to,from+p);
+    copy_to(to,from+p);
     return to;
     // pos=0;
   }
@@ -492,7 +491,7 @@ char * MakePath(const char *from)
   
 }
 
-char *GetPwd()
+char *get_pwd()
 {
   return thread_current()->pwd;
 }

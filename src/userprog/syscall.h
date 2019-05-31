@@ -7,6 +7,7 @@
 
 typedef void (*syscall_function) (struct intr_frame *);
 #define SYSCALL_NUMBER 20
+#define MAX_PATH 1320
 
 void syscall_init (void);
 
@@ -29,11 +30,11 @@ void sys_write(struct intr_frame *);
 void sys_seek(struct intr_frame *);
 void sys_tell(struct intr_frame *);
 void sys_close(struct intr_frame *);
-void IMkDir(struct intr_frame *f);
-void IChDir(struct intr_frame *f);
-void IReadDir(struct intr_frame *f);
-void IInumber(struct intr_frame *f);
-void IIsDir(struct intr_frame *f);
+void sys_mkdir(struct intr_frame *f);
+void sys_chdir(struct intr_frame *f);
+void sys_readdir(struct intr_frame *f);
+void sys_inumber(struct intr_frame *f);
+void sys_isdir(struct intr_frame *f);
 
 
 struct file_node * find_file(struct list *, int);

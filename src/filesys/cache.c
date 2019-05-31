@@ -3,7 +3,7 @@
 #include"devices/block.h"
 #include"threads/synch.h"
 struct lock CacheLock;
-struct BlockCache
+struct Cache
 {
 	size_t SecNo;
 	bool Use;
@@ -19,75 +19,73 @@ struct Sec
 unsigned int PassTime=0;
 bool Inited=false;
 struct Sec SecArr[CacheSize];
-struct BlockCache ManArr[CacheSize];
-void InitCacheMan(void)
+struct Cache cache[CacheSize];
+void cache_init(void)
 {
 	int i;
 	for(i=0;i<CacheSize;i++)
 	{
-		ManArr[i].SecNo=0;
-		ManArr[i].Use=false;
-		ManArr[i].Num=0;
-		ManArr[i].Dirty=false;
-		lock_init(&ManArr[i].Lock);
+		cache[i].SecNo=0;
+		cache[i].Use=false;
+		cache[i].Num=0;
+		cache[i].Dirty=false;
+		lock_init(&cache[i].Lock);
 	}
 	PassTime=0;
 	lock_init(&CacheLock);
 	Inited=true;
 }
 
-void CacheRead(block_sector_t sector,void *buffer)
+void cache_read(block_sector_t sector,void *buffer)
 {	
-	int n=InCache(sector);
+	int n=in_cache(sector);
 	if(n==-1)
 		n=Fetch(sector);
-	lock_acquire(&ManArr[n].Lock);
+	lock_acquire(&cache[n].Lock);
 	ASSERT(n!=-1);
 	memcpy(buffer,SecArr[n].data,BLOCK_SECTOR_SIZE);
-	CountSec(n);
-	lock_release(&ManArr[n].Lock);
+	hit_count(n);
+	lock_release(&cache[n].Lock);
 //	Fetch(sector+1);
 }
-void CacheWrite(block_sector_t sector,const void *buffer)
+void cache_write(block_sector_t sector,const void *buffer)
 {
-	int n=InCache(sector);
+	int n=in_cache(sector);
 	if(n==-1)
 		n=Fetch(sector);
-	lock_acquire(&ManArr[n].Lock);
+	lock_acquire(&cache[n].Lock);
 	memcpy(SecArr[n].data,buffer,BLOCK_SECTOR_SIZE);
-	ManArr[n].Dirty=true;
-	CountSec(n);
-	lock_release(&ManArr[n].Lock);
-//	Fetch(sector+1);
-	//WriteBack(n);
+	cache[n].Dirty=true;
+	hit_count(n);
+	lock_release(&cache[n].Lock);
 }
 int Fetch(block_sector_t sector)
 {
 	lock_acquire(&CacheLock);
 	int i,n=-1;
 	for(i=0;i<CacheSize;i++)
-		if(ManArr[i].Use==false)
-		{
-			n=i;
-			break;
-		}
+	if(cache[i].Use==false)
+	{
+		n=i;
+		break;
+	}
 	if(n==-1)
 		n=Evict();
 	fs_device->ops->read(fs_device->aux,sector,SecArr[n].data);
 	fs_device->read_cnt++;
-	ManArr[n].Use=true;
-	ManArr[n].SecNo=sector;
-	ManArr[n].Num=0;
-	ManArr[n].Dirty=false;
+	cache[n].Use=true;
+	cache[n].SecNo=sector;
+	cache[n].Num=0;
+	cache[n].Dirty=false;
 	lock_release(&CacheLock);
 //	printf("Fetch run\n");
 	return n;
 }
-int InCache(block_sector_t sector)
+int in_cache(block_sector_t sector)
 {
 	int i;
 	for(i=0;i<CacheSize;i++)
-		if(ManArr[i].Use==true && ManArr[i].SecNo==sector)
+		if(cache[i].Use==true && cache[i].SecNo==sector)
 			return i;
 	return -1;
 }
@@ -100,42 +98,42 @@ int Evict()
 	unsigned int maxn=0;
 	for(i=0;i<CacheSize;i++)
 	{
-	if(ManArr[i].Use==true&&ManArr[i].Num>=maxn)
+	if(cache[i].Use==true&&cache[i].Num>=maxn)
 		{
-			maxn=ManArr[i].Num;
+			maxn=cache[i].Num;
 			n=i;
 		}
 	}
-	lock_acquire(&ManArr[n].Lock);
+	lock_acquire(&cache[n].Lock);
 	ASSERT(n!=-1);
-	WriteBack(n);
-	ManArr[n].Use=false;
-	lock_release(&ManArr[n].Lock);
+	write_back(n);
+	cache[n].Use=false;
+	lock_release(&cache[n].Lock);
 //	printf("Evict run\n");
 	return n;
 }
-void WriteBack(int n)
+void write_back(int n)
 {
-	fs_device->ops->write(fs_device->aux,ManArr[n].SecNo,SecArr[n].data);
+	fs_device->ops->write(fs_device->aux,cache[n].SecNo,SecArr[n].data);
 	fs_device->write_cnt++;
-	ManArr[n].Dirty=false;
+	cache[n].Dirty=false;
 }
-void DestroyCacheMan(void)
+void cache_close(void)
 {
-	WriteAllBack();
+	write_back_all();
 }
-void CountSec(int n)
-{
-	int i;
-	for(i=0;i<CacheSize;i++)
-		if(ManArr[i].Use==true)
-			ManArr[i].Num++;
-	ManArr[n].Num=0;
-}
-void WriteAllBack(void)
+void hit_count(int n)
 {
 	int i;
 	for(i=0;i<CacheSize;i++)
-		if(ManArr[i].Use==true&&ManArr[i].Dirty==true)
-			WriteBack(i);
+		if(cache[i].Use==true)
+			cache[i].Num++;
+	cache[n].Num=0;
+}
+void write_back_all(void)
+{
+	int i;
+	for(i=0;i<CacheSize;i++)
+		if(cache[i].Use==true&&cache[i].Dirty==true)
+			write_back(i);
 }

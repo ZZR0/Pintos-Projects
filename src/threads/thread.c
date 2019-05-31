@@ -519,6 +519,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->executable = NULL;
   t->max_fd = 2;
   t->pwd = NULL;
+  t->cur_dir = NULL;
 
   if(t == initial_thread) t->parent = NULL;
   else t->parent = thread_current();

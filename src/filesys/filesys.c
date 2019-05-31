@@ -6,6 +6,7 @@
 #include "filesys/free-map.h"
 #include "filesys/inode.h"
 #include "filesys/directory.h"
+#include "filesys/cache.h"
 
 /* Partition that contains the file system. */
 struct block *fs_device;
@@ -23,6 +24,7 @@ filesys_init (bool format)
 
   inode_init ();
   free_map_init ();
+  cache_init();
 
   if (format) 
     do_format ();
@@ -35,6 +37,7 @@ filesys_init (bool format)
 void
 filesys_done (void) 
 {
+  cache_close();
   free_map_close ();
 }
 
@@ -47,7 +50,9 @@ filesys_create (const char *name, off_t initial_size)
 {
   block_sector_t inode_sector = 0;
   int pos;
-  struct dir *dir = OpenDir (name, &pos);
+  char *tpath=malloc(strlen(name)+1);
+  copy_to(tpath,name);
+  struct dir *dir = path_open (name, &pos);
   bool success = (dir != NULL
                   && free_map_allocate (1, &inode_sector)
                   && inode_create (inode_sector, initial_size)
@@ -55,7 +60,6 @@ filesys_create (const char *name, off_t initial_size)
   if (!success && inode_sector != 0) 
     free_map_release (inode_sector, 1);
   dir_close (dir);
-
   return success;
 }
 
@@ -73,9 +77,9 @@ filesys_open (const char *name)
     inode = inode_open (ROOT_DIR_SECTOR);
     return file_open (inode);
   }
-  
+
   int pos;
-  struct dir *dir = OpenDir (name, &pos);
+  struct dir *dir = path_open (name, &pos);
 
   if (dir != NULL)
     dir_lookup (dir, name+pos, &inode);
@@ -92,7 +96,7 @@ bool
 filesys_remove (const char *name) 
 {
   int pos;
-  struct dir *dir = OpenDir (name, &pos);
+  struct dir *dir = path_open (name, &pos);
   bool success = dir != NULL && dir_remove (dir, name+pos);
   dir_close (dir); 
 

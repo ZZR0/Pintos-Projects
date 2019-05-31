@@ -12,7 +12,7 @@
 bool
 dir_create (block_sector_t sector, size_t entry_cnt)
 {
-  return inode_create_ex (sector, entry_cnt * sizeof (struct dir_entry), 1);
+  return inode_create_extend (sector, entry_cnt * sizeof (struct dir_entry), 1);
 }
 
 /* Opens and returns the directory for the given INODE, of which
@@ -86,6 +86,8 @@ lookup (const struct dir *dir, const char *name,
 
   for (ofs = 0; inode_read_at (dir->inode, &e, sizeof e, ofs) == sizeof e;
        ofs += sizeof e) 
+  {
+    // printf("%s %s\n",name, e.name);
     if (e.in_use && !strcmp (name, e.name)) 
       {
         if (ep != NULL)
@@ -94,6 +96,8 @@ lookup (const struct dir *dir, const char *name,
           *ofsp = ofs;
         return true;
       }
+  }
+    
   return false;
 }
 
@@ -164,6 +168,23 @@ dir_add (struct dir *dir, const char *name, block_sector_t inode_sector)
   return success;
 }
 
+static bool
+is_empty (const struct inode *inode) 
+{
+  struct dir_entry e;
+  size_t ofs;
+  
+
+  for (ofs = 0; inode_read_at (inode, &e, sizeof e, ofs) == sizeof e;
+       ofs += sizeof e) 
+  {
+    if (e.in_use) 
+      return false;
+  }
+    
+  return true;
+}
+
 /* Removes any entry for NAME in DIR.
    Returns true if successful, false on failure,
    which occurs only if there is no file with the given NAME. */
@@ -181,11 +202,11 @@ dir_remove (struct dir *dir, const char *name)
   /* Find directory entry. */
   if (!lookup (dir, name, &e, &ofs))
     goto done;
-
   /* Open inode. */
   inode = inode_open (e.inode_sector);
   if (inode == NULL || inode->data.isdir && inode->open_cnt > 1)
-    goto done;
+    if (inode == NULL || !is_empty(inode))
+      goto done;
 
   /* Erase directory entry. */
   e.in_use = false;
@@ -221,7 +242,7 @@ dir_readdir (struct dir *dir, char name[NAME_MAX + 1])
   return false;
 }
 
-struct dir *OpenDir(char *path,int *pos)
+struct dir *path_open(char *path,int *pos)
 {
   lock_acquire(&DirOpenLock);
   struct dir *dir=dir_open_root();

@@ -8,14 +8,14 @@
 #include"devices/block.h"
 extern unsigned int PassTime;
 extern bool Inited;
-void InitCacheMan(void);
-void CacheRead(block_sector_t sector,void *buffer);
-void CacheWrite(block_sector_t,const void *buffer);
+void cache_init(void);
+void cache_read(block_sector_t sector,void *buffer);
+void cache_write(block_sector_t,const void *buffer);
 int Fetch(block_sector_t sector);
-int InCache(block_sector_t sector);
+int in_cache(block_sector_t sector);
 int Evict(void);
-void WriteBack(int n);
-void DestroyCacheMan(void);
-void CountSec(int n);
-void WriteAllBack(void);
+void write_back(int n);
+void cache_close(void);
+void hit_count(int n);
+void write_back_all(void);
 #endif
