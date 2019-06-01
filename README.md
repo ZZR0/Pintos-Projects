@@ -1,7 +1,7 @@
 **Stanford CS104 Pintos Project**
 
 
-I implemnt three project base on fallowing refrences.
+The project was completed on the basis of fallowing refrences.
 
 **Reference**  
 [[1] https://web.stanford.edu/class/cs140/projects/pintos/pintos.html#SEC_Top](https://web.stanford.edu/class/cs140/projects/pintos/pintos.html#SEC_Top)  
